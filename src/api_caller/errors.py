@@ -1,0 +1,2 @@
+class MissingHistoryDataError(Exception):
+    pass
