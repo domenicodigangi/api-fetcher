@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 class DomotzAPICaller:
-    def __init__(self, api_settings: DomotzAPISettings):
+    def __init__(self, api_settings: DomotzAPISettings, cache=None):
         self.task_helper = AsyncTaskHelper()
         self._api_settings = api_settings
-        self._cache = RedisCache()
+        self._cache = cache or RedisCache()
         self.key_prefix = self.get_key_prefix()
         logger.debug("api_settings: %s", self._api_settings)
         self._start_date_history = self._format_past_datetime(
