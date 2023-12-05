@@ -5,15 +5,14 @@ from typing import Dict, Tuple
 
 import httpx
 import pandas as pd
-import streamlit as st
 
-from domotz_dashboards.cache.redis import RedisCache
-from domotz_dashboards.domotz_api_caller.async_task_helper import AsyncTaskHelper
-from domotz_dashboards.domotz_api_caller.data_formatter import (
+from api_fetcher.cache.redis import RedisCache
+from api_fetcher.async_task_helper import AsyncTaskHelper
+from api_fetcher.data_formatter import (
     FormattedDataType,
     PandasDataFormatter,
 )
-from domotz_dashboards.domotz_api_caller.settings import DomotzAPISettings
+from api_fetcher.settings import DomotzAPISettings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -76,8 +75,6 @@ class DomotzAPICaller:
         df_variables["history_hash"] = None
         df_variables["cache_key"] = None
 
-        status_text = st.empty()
-        status_text.text("Loading Data...")
 
         task_res = await self.task_helper.define_and_gather_task(
             self.get_history_device_variable,
