@@ -1,10 +1,10 @@
 import asyncio
-from typing import Awaitable, Optional
+from typing import Callable, Optional
 
 
 class AsyncTaskHelper:
     async def define_and_gather_task(
-        self, coroutine: Awaitable, args_list, args_to_ret_inds=None
+        self, coroutine: Callable, args_list, args_to_ret_inds=None
     ):
         tasks = [
             self.safe_coro(coroutine, *_args, args_to_ret_inds=args_to_ret_inds)
@@ -15,7 +15,7 @@ class AsyncTaskHelper:
 
     async def safe_coro(
         self,
-        coroutine: Awaitable,
+        coroutine: Callable,
         *args,
         args_to_ret_inds: Optional[list[int]] = None,
         kwargs_to_ret_keys: Optional[list[str]] = None,

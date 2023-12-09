@@ -1,7 +1,7 @@
 import hashlib
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import httpx
 import pandas as pd
@@ -9,9 +9,18 @@ from api_fetcher.async_task_helper import AsyncTaskHelper
 from api_fetcher.cache.redis import RedisCache
 from api_fetcher.data_formatter import FormattedDataType, PandasDataFormatter
 from api_fetcher.settings import DomotzAPISettings
+from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class CachedDataFormat(BaseModel):
+    cache_key: str
+    data: Optional[FormattedDataType]
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class DomotzAPIDataFetcher:
@@ -56,109 +65,38 @@ class DomotzAPIDataFetcher:
                 "path": "/agent/{agent_id}/device/{device_id}/inventory",
                 "params": {},
             },
+            "history_device_variable": {
+                "path": "/agent/{agent_id}/device/{device_id}/variable/{variable_id}/history",
+                "params": {"from": self._start_date_history},
+            },
         }
 
-    async def get(self, item: str):
+    async def get(self, item: str, path_params: Optional[Dict] = None):
         if item in self._standard_calls:
+            if path_params is None:
+                url = self._standard_calls[item]["path"]
+            else:
+                url = self._standard_calls[item]["path"].format(**path_params)
             return await self.cached_api_get_formatted(
-                self._standard_calls[item]["path"],
+                url,
                 params=self._standard_calls[item]["params"],
             )
         else:
             raise KeyError(f"Item {item} not found in standard calls")
 
-    async def get_all_variables_from_agent(
-        self, agent_id: int
-    ) -> Tuple[FormattedDataType, dict[str, dict]]:
-        df_variables = await self.get("list_device_variables")
-        variables_history = {}
-        df_variables = df_variables.loc[df_variables["has_history"], :]
-        df_variables["history_hash"] = None
-        df_variables["cache_key"] = None
-
-        task_res = await self.task_helper.define_and_gather_task(
-            self.get_history_device_variable,
-            [
-                (agent_id, row["device_id"], row["id"])
-                for ind, row in df_variables.iterrows()
-            ],
-            args_to_ret_inds=[2],
-        )
-
-        for safe_res in task_res:
-            (
-                success,
-                res,
-                args_retuned,
-                kwargs_retuned,
-            ) = safe_res
-            variable_id = args_retuned[0]
-            var_ind = df_variables["id"] == variable_id
-            if success:
-                df_history, cache_key = res
-                variables_history[cache_key] = {
-                    "hist": df_history,
-                }
-                df_variables.loc[var_ind, "history_hash"] = hash(df_history.to_json())
-                df_variables.loc[var_ind, "cache_key"] = cache_key
-                df_variables.loc[var_ind, "history_len"] = df_history.shape[0]
-            else:
-                df_variables.loc[var_ind, "has_history"] = False
-
-        df_variables = (
-            df_variables.loc[df_variables["has_history"], :]
-            .groupby(by=["history_hash", "path"])
-            .agg(
-                cache_key=("cache_key", "first"),
-                device_id=("device_id", "first"),
-                id=("id", "first"),
-                replication_count=("id", "count"),
-                metric=("metric", "first"),
-                unit=("unit", "first"),
-            )
-            .reset_index()
-        )
-        variables_history = {
-            k: v
-            for k, v in variables_history.items()
-            if k in df_variables["cache_key"].tolist()
-        }
-        return df_variables, variables_history
-
-    async def get_history_device_variable(
-        self, agent_id: int, device_id: int, variable_id: int
-    ) -> Tuple[FormattedDataType, str]:
-        params = {"from": self._start_date_history}
-        path = f"/agent/{agent_id}/device/{device_id}/variable/{variable_id}/history"
-        df = await self.cached_api_get_formatted(
-            path,
-            params=params,
-        )
-        cache_key = self.get_cache_key(path, params)
-        return df, cache_key
-
     async def cached_api_get_formatted(
         self, path: str, params: Dict | None = None
-    ) -> FormattedDataType:
+    ) -> CachedDataFormat:
         cache_key = self.get_cache_key(path, params)
 
-        return await self._cached_api_call(
-            cache_key,
-            self._api_get_formatted,
-            path,
-            params=params,
-        )
-
-    async def _cached_api_call(self, cache_key, api_function, *args, **kwargs):
         cached_data = await self._cache.get(cache_key)
 
         if cached_data is not None:
-            return cached_data
+            return CachedDataFormat(cache_key=cache_key, data=cached_data)
 
-        result = await api_function(*args, **kwargs)
-
+        result = await self._api_get_formatted(path, params=params)
         await self._cache.set(cache_key, result)
-        return result
+        return CachedDataFormat(cache_key=cache_key, data=result)
 
     async def _api_get_formatted(
         self, resource_path: str, **kwargs
@@ -187,22 +125,89 @@ class DomotzAPIDataFetcher:
     def get_cache_key(self, path: str, params: Dict | None = None) -> str:
         return f"{self.key_prefix}{path}{params}"
 
+    async def get_all_variables_from_agent(
+        self, agent_id: int
+    ) -> Tuple[FormattedDataType, dict[str, dict]]:
+        async def get_history_device_variable(
+            agent_id: int, device_id: int, variable_id: int
+        ) -> CachedDataFormat:
+            return await self.get(
+                "history_device_variable",
+                path_params={
+                    "agent_id": agent_id,
+                    "device_id": device_id,
+                    "variable_id": variable_id,
+                },
+            )
+
+        variables = await self.get("list_device_variables", {"agent_id": agent_id})
+        variables_history = {}
+        df_variables = variables.data
+        df_variables = df_variables.loc[df_variables["has_history"], :]
+        df_variables["history_hash"] = None
+        df_variables["cache_key"] = None
+
+        task_res = await self.task_helper.define_and_gather_task(
+            get_history_device_variable,
+            [
+                (agent_id, row["device_id"], row["id"])
+                for ind, row in df_variables.iterrows()
+            ],
+            args_to_ret_inds=[2],
+        )
+
+        for safe_res in task_res:
+            (
+                success,
+                res,
+                args_retuned,
+                kwargs_retuned,
+            ) = safe_res
+            variable_id = args_retuned[0]
+            var_ind = df_variables["id"] == variable_id
+            if success and res is not None:
+                df_history = res.data
+                variables_history[res.cache_key] = {
+                    "hist": df_history,
+                }
+                df_variables.loc[var_ind, "history_hash"] = hash(df_history.to_json())
+                df_variables.loc[var_ind, "cache_key"] = res.cache_key
+                df_variables.loc[var_ind, "history_len"] = df_history.shape[0]
+            else:
+                df_variables.loc[var_ind, "has_history"] = False
+
+        df_variables = (
+            df_variables.loc[df_variables["has_history"], :]
+            .groupby(by=["history_hash", "path"])
+            .agg(
+                cache_key=("cache_key", "first"),
+                device_id=("device_id", "first"),
+                id=("id", "first"),
+                replication_count=("id", "count"),
+                metric=("metric", "first"),
+                unit=("unit", "first"),
+            )
+            .reset_index()
+        )
+        variables_history = {
+            k: v
+            for k, v in variables_history.items()
+            if k in df_variables["cache_key"].tolist()
+        }
+        return df_variables, variables_history
+
 
 # if __name__ == "__main__":
+#     from api_fetcher.settings import BASE_URLS
 #     from dotenv import dotenv_values
 
 #     env = dotenv_values("/workspaces/anomaly-detection-iot/.env")
-#     api_caller = DomotzAPICaller(
+#     api_fetcher = DomotzAPIDataFetcher(
 #         DomotzAPISettings(api_key=env["API_KEY_EU"], base_url=BASE_URLS["EU"])
 #     )
-#     api_caller.clear_cache()
-#     agents = await api_caller.get_agents_list()
-#     agent_id = agents.iloc[0, :]["id"]
-#     devices = await api_caller.get_list_devices(agent_id)
+#     api_fetcher.clear_cache()
+#     agents = await api_fetcher.get("agents_list")
+#     agent_id = agents.data.iloc[0, :]["id"]
+#     devices = await api_fetcher.get("list_devices", path_params={"agent_id": agent_id})
 
-#     task_res = await self.task_helper.define_and_gather_task(
-#         api_caller.get_device_inventory,
-#         [(agent_id, row["id"]) for ind, row in devices.iterrows()],
-#     )
-#     device_id = devices.iloc[0, :]["id"]
-#     await api_caller.get_device_inventory(agent_id, device_id)
+#     variables = await api_fetcher.get_all_variables_from_agent(agent_id)
