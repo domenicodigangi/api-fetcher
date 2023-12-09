@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class DomotzAPICaller:
+class DomotzAPIDataFetcher:
     def __init__(self, api_settings: DomotzAPISettings, cache=None):
         self.task_helper = AsyncTaskHelper()
         self._api_settings = api_settings
