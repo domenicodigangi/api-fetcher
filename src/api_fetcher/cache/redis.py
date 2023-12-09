@@ -1,7 +1,7 @@
 import logging
 import pickle
 
-import aioredis
+from redis import asyncio as aioredis
 import redis
 
 logging.basicConfig(level=logging.INFO)
