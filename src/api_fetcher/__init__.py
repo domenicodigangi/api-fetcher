@@ -35,33 +35,42 @@ class DomotzAPICaller:
             hour=0, minute=0, second=0, microsecond=0
         ).isoformat(timespec="seconds")
 
-    async def get_agents_list(self) -> FormattedDataType:
-        return await self.cached_api_get_formatted(
-            "/agent",
-        )
+    @property
+    def _standard_calls(self):
+        return {
+            "agents_list": {"path": "/agent", "params": {}},
+            "agent": {"path": "/agent/{agent_id}", "params": {}},
+            "agent_status_history": {
+                "path": "/agent/{agent_id}/history/network/event",
+                "params": {},
+            },
+            "list_devices": {
+                "path": "/agent/{agent_id}/device",
+                "params": {"show_hidden": True},
+            },
+            "list_device_variables": {
+                "path": "/agent/{agent_id}/device/variable",
+                "params": {"page_size": 1000, "has_history": "true"},
+            },
+            "device_inventory": {
+                "path": "/agent/{agent_id}/device/{device_id}/inventory",
+                "params": {},
+            },
+        }
 
-    async def get_agent(self, agent_id: int) -> FormattedDataType:
-        return await self.cached_api_get_formatted(
-            f"/agent/{agent_id}",
-        )
-
-    async def get_agent_status_history(self, agent_id: int) -> FormattedDataType:
-        return await self.cached_api_get_formatted(
-            f"/agent/{agent_id}/history/network/event",
-        )
-
-    async def get_list_devices(self, agent_id: int) -> FormattedDataType:
-        params = {"show_hidden": True}
-
-        return await self.cached_api_get_formatted(
-            f"/agent/{agent_id}/device",
-            params=params,
-        )
+    async def get(self, item: str):
+        if item in self._standard_calls:
+            return await self.cached_api_get_formatted(
+                self._standard_calls[item]["path"],
+                params=self._standard_calls[item]["params"],
+            )
+        else:
+            raise KeyError(f"Item {item} not found in standard calls")
 
     async def get_all_variables_from_agent(
         self, agent_id: int
     ) -> Tuple[FormattedDataType, dict[str, dict]]:
-        df_variables = await self.get_list_device_variables(agent_id)
+        df_variables = await self.get("list_device_variables")
         variables_history = {}
         df_variables = df_variables.loc[df_variables["has_history"], :]
         df_variables["history_hash"] = None
@@ -116,14 +125,6 @@ class DomotzAPICaller:
         }
         return df_variables, variables_history
 
-    async def get_list_device_variables(self, agent_id: int) -> FormattedDataType:
-        params = {"page_size": 1000, "has_history": "true"}
-
-        return await self.cached_api_get_formatted(
-            f"/agent/{agent_id}/device/variable",
-            params=params,
-        )
-
     async def get_history_device_variable(
         self, agent_id: int, device_id: int, variable_id: int
     ) -> Tuple[FormattedDataType, str]:
@@ -135,13 +136,6 @@ class DomotzAPICaller:
         )
         cache_key = self.get_cache_key(path, params)
         return df, cache_key
-
-    async def get_device_inventory(
-        self, agent_id: int, device_id: int
-    ) -> FormattedDataType:
-        return await self.cached_api_get_formatted(
-            f"/agent/{agent_id}/device/{device_id}/inventory",
-        )
 
     async def cached_api_get_formatted(
         self, path: str, params: Dict | None = None
