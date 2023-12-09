@@ -5,13 +5,9 @@ from typing import Dict, Tuple
 
 import httpx
 import pandas as pd
-
-from api_fetcher.cache.redis import RedisCache
 from api_fetcher.async_task_helper import AsyncTaskHelper
-from api_fetcher.data_formatter import (
-    FormattedDataType,
-    PandasDataFormatter,
-)
+from api_fetcher.cache.redis import RedisCache
+from api_fetcher.data_formatter import FormattedDataType, PandasDataFormatter
 from api_fetcher.settings import DomotzAPISettings
 
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +18,7 @@ class DomotzAPICaller:
     def __init__(self, api_settings: DomotzAPISettings, cache=None):
         self.task_helper = AsyncTaskHelper()
         self._api_settings = api_settings
-        self._cache = cache or RedisCache()
+        self._cache = cache or RedisCache(ttl=self._api_settings.cache_ttl)
         self.key_prefix = self.get_key_prefix()
         logger.debug("api_settings: %s", self._api_settings)
         self._start_date_history = self._format_past_datetime(
@@ -41,19 +37,16 @@ class DomotzAPICaller:
 
     async def get_agents_list(self) -> FormattedDataType:
         return await self.cached_api_get_formatted(
-            "_agents_list",
             "/agent",
         )
 
     async def get_agent(self, agent_id: int) -> FormattedDataType:
         return await self.cached_api_get_formatted(
-            f"_agent_{agent_id}_details",
             f"/agent/{agent_id}",
         )
 
     async def get_agent_status_history(self, agent_id: int) -> FormattedDataType:
         return await self.cached_api_get_formatted(
-            f"_agent_status_history_{agent_id}",
             f"/agent/{agent_id}/history/network/event",
         )
 
@@ -61,7 +54,6 @@ class DomotzAPICaller:
         params = {"show_hidden": True}
 
         return await self.cached_api_get_formatted(
-            f"_list_devices_{agent_id}_params={params}",
             f"/agent/{agent_id}/device",
             params=params,
         )
@@ -74,7 +66,6 @@ class DomotzAPICaller:
         df_variables = df_variables.loc[df_variables["has_history"], :]
         df_variables["history_hash"] = None
         df_variables["cache_key"] = None
-
 
         task_res = await self.task_helper.define_and_gather_task(
             self.get_history_device_variable,
@@ -129,7 +120,6 @@ class DomotzAPICaller:
         params = {"page_size": 1000, "has_history": "true"}
 
         return await self.cached_api_get_formatted(
-            f"_list_device_variables_{agent_id}_params={params}",
             f"/agent/{agent_id}/device/variable",
             params=params,
         )
@@ -138,29 +128,26 @@ class DomotzAPICaller:
         self, agent_id: int, device_id: int, variable_id: int
     ) -> Tuple[FormattedDataType, str]:
         params = {"from": self._start_date_history}
-        cache_key = (
-            f"_history_device_variable_{agent_id}_{device_id}_{variable_id}_{params}"
-        )
-
+        path = f"/agent/{agent_id}/device/{device_id}/variable/{variable_id}/history"
         df = await self.cached_api_get_formatted(
-            cache_key,
-            f"/agent/{agent_id}/device/{device_id}/variable/{variable_id}/history",
+            path,
             params=params,
         )
-
+        cache_key = self.get_cache_key(path, params)
         return df, cache_key
 
     async def get_device_inventory(
         self, agent_id: int, device_id: int
     ) -> FormattedDataType:
         return await self.cached_api_get_formatted(
-            f"_device_inventory_agent_{agent_id}_device_{device_id}",
             f"/agent/{agent_id}/device/{device_id}/inventory",
         )
 
     async def cached_api_get_formatted(
-        self, cache_key: str, path: str, params: Dict | None = None
+        self, path: str, params: Dict | None = None
     ) -> FormattedDataType:
+        cache_key = self.get_cache_key(path, params)
+
         return await self._cached_api_call(
             cache_key,
             self._api_get_formatted,
@@ -169,15 +156,14 @@ class DomotzAPICaller:
         )
 
     async def _cached_api_call(self, cache_key, api_function, *args, **kwargs):
-        prefixed_cache_key = f"{self.key_prefix}{cache_key}"
-        cached_data = await self._cache.get(prefixed_cache_key)
+        cached_data = await self._cache.get(cache_key)
 
         if cached_data is not None:
             return cached_data
 
         result = await api_function(*args, **kwargs)
 
-        await self._cache.set(cache_key, result, ttl=self._api_settings.cache_ttl)
+        await self._cache.set(cache_key, result)
         return result
 
     async def _api_get_formatted(
@@ -203,6 +189,9 @@ class DomotzAPICaller:
 
     def clear_cache(self):
         self._cache.clear_cache()
+
+    def get_cache_key(self, path: str, params: Dict | None = None) -> str:
+        return f"{self.key_prefix}{path}{params}"
 
 
 # if __name__ == "__main__":
