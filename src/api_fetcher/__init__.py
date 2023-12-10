@@ -1,13 +1,16 @@
 import hashlib
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 import pandas as pd
 from api_fetcher.async_task_helper import AsyncTaskHelper
 from api_fetcher.cache.redis import RedisCache
-from api_fetcher.data_formatter import FormattedDataType, PandasDataFormatter
+from api_fetcher.data_format.pandas_for_domotz import (
+    FormattedDataType,
+    PandasDataFormatter,
+)
 from api_fetcher.settings import DomotzAPISettings
 from pydantic import BaseModel
 
@@ -70,6 +73,10 @@ class DomotzAPIDataFetcher:
                 "params": {"from": self._start_date_history},
             },
         }
+
+    async def get_iterator(self, item: str, list_path_params: List[Dict]):
+        for path_params in list_path_params:
+            yield await self.get(item, path_params=path_params)
 
     async def get(self, item: str, path_params: Optional[Dict] = None):
         if item in self._standard_calls:
