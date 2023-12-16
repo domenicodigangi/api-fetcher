@@ -1,16 +1,13 @@
 import hashlib
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 import pandas as pd
 from api_fetcher.async_task_helper import AsyncTaskHelper
 from api_fetcher.cache.redis import RedisCache
-from api_fetcher.data_format.pandas_for_domotz import (
-    FormattedDataType,
-    PandasDataFormatter,
-)
+from api_fetcher.data_format.dataframe import FormattedDataType, PolarsDataFormatter
 from api_fetcher.settings import DomotzAPISettings
 from pydantic import BaseModel
 
@@ -36,7 +33,7 @@ class DomotzAPIDataFetcher:
         self._start_date_history = self._format_past_datetime(
             self._api_settings.days_history
         )
-        self.data_formatter = PandasDataFormatter()
+        self.data_formatter = PolarsDataFormatter()
 
     def get_key_prefix(self) -> str:
         return hashlib.sha256(self._api_settings.api_key.encode()).hexdigest()
@@ -48,7 +45,7 @@ class DomotzAPIDataFetcher:
         ).isoformat(timespec="seconds")
 
     @property
-    def _standard_calls(self):
+    def standard_calls(self):
         return {
             "agents_list": {"path": "/agent", "params": {}},
             "agent": {"path": "/agent/{agent_id}", "params": {}},
@@ -79,14 +76,14 @@ class DomotzAPIDataFetcher:
             yield await self.get(item, path_params=path_params)
 
     async def get(self, item: str, path_params: Optional[Dict] = None):
-        if item in self._standard_calls:
+        if item in self.standard_calls:
             if path_params is None:
-                url = self._standard_calls[item]["path"]
+                url = self.standard_calls[item]["path"]
             else:
-                url = self._standard_calls[item]["path"].format(**path_params)
+                url = self.standard_calls[item]["path"].format(**path_params)
             return await self.cached_api_get_formatted(
                 url,
-                params=self._standard_calls[item]["params"],
+                params=self.standard_calls[item]["params"],
             )
         else:
             raise KeyError(f"Item {item} not found in standard calls")

@@ -2,19 +2,20 @@ import logging
 
 import httpx
 import pandas as pd
+import polars as pl
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-FormattedDataType = pd.DataFrame
+FormattedDataType = pl.DataFrame
 
 
-class PandasDataFormatter:
+class PolarsDataFormatter:
     def format_response(self, url: str, response: httpx.Response) -> FormattedDataType:
         r_json_list = response.json()
         logger.debug("r_json_list: %s", r_json_list)
         df = pd.json_normalize(r_json_list)
         self._format_df(url, df)
-        return df
+        return pl.from_pandas(df)
 
     def _format_df(self, url: str, df: FormattedDataType) -> FormattedDataType:
         if "timestamp" in df.columns:
