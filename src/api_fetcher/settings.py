@@ -11,7 +11,6 @@ class APISettings(BaseSettings):
     api_key: str | None = Field(None, env="API_KEY")
     base_url: str = Field(default=BASE_URLS["US"], env="BASE_URL")
     cache_ttl: int = Field(default=3600, env="CACHE_TTL")
-    days_history: int = Field(default=14, env="DAYS_HISTORY")
 
     class Config:
         env_file = ".env"

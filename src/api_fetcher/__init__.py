@@ -1,10 +1,8 @@
 import hashlib
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import httpx
-import pandas as pd
 from api_fetcher.async_task_helper import AsyncTaskHelper
 from api_fetcher.cache.redis import RedisCache
 from api_fetcher.data_format.dataframe import FormattedDataType, PolarsDataFormatter
@@ -23,27 +21,19 @@ class CachedDataFormat(BaseModel):
         arbitrary_types_allowed = True
 
 
-class DomotzAPIDataFetcher:
-    def __init__(self, api_settings: APISettings, standard_calls=dict, cache=None):
+class APIDataFetcher:
+    def __init__(self, api_settings: APISettings, standard_calls=Dict, cache=None):
         self.task_helper = AsyncTaskHelper()
         self._api_settings = api_settings
         self._cache = cache or RedisCache(ttl=self._api_settings.cache_ttl)
         self.key_prefix = self.get_key_prefix()
         logger.debug("api_settings: %s", self._api_settings)
-        self._start_date_history = self._format_past_datetime(
-            self._api_settings.days_history
-        )
+
         self.data_formatter = PolarsDataFormatter()
         self._standard_calls = standard_calls
 
     def get_key_prefix(self) -> str:
         return hashlib.sha256(self._api_settings.api_key.encode()).hexdigest()
-
-    def _format_past_datetime(self, days_history: int) -> str:
-        datetime_from = datetime.utcnow() - timedelta(days=days_history)
-        return datetime_from.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).isoformat(timespec="seconds")
 
     @property
     def standard_calls(self):
@@ -115,7 +105,7 @@ class DomotzAPIDataFetcher:
 #     from dotenv import dotenv_values
 
 #     env = dotenv_values("/workspaces/anomaly-detection-iot/.env")
-#     api_fetcher = DomotzAPIDataFetcher(
+#     api_fetcher = APIDataFetcher(
 #         APISettings(api_key=env["API_KEY_EU"], base_url=BASE_URLS["EU"])
 #     )
 #     api_fetcher.clear_cache()
