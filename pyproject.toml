@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "api-fetcher"
 version = "0.1.0"
-description = "A package to fetch data from domotz's public api"
+description = "A package to fetch data from public apis"
 authors = ["Domenico Di Gangi <digangidomenico@gmail.com>"]
 packages = [{include = "api_fetcher", from="src"}]
 
@@ -13,6 +13,7 @@ httpx = "^0.25.0"
 redis = "^5.0.1"
 pandas = "^1.5.3"
 cachetools = "^5.3.2"
+polars = "^0.20.6"
 
 [build-system]
 requires = ["poetry-core"]
