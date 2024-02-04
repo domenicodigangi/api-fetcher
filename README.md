@@ -4,7 +4,7 @@ Fetch data from public APIs with ease.
 
 ## Badges
 
-![Build Status](https://github.com/domenicodigangi/api-fetcher/workflows/run-tests.yml/badge.svg)
+![Build Status](https://github.com/domenicodigangi/api-fetcher/workflows/Run%20tests.yml/badge.svg)
 [![Coverage Status](https://codecov.io/gh/domenicodigangi/api-fetcher/branch/main/graph/badge.svg)](https://codecov.io/gh/domenicodigangi/api-fetcher)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
