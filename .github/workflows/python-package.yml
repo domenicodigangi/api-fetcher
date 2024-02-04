@@ -51,10 +51,10 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
       #----------------------------------------------
-      #              run test suite
+      #              run test suite with coverage
       #----------------------------------------------
-      - name: Run tests
+      - name: Run coverage
         run: |
           source .venv/bin/activate
-          pytest tests/
+          coverage run -m pytest tests/
           coverage report
