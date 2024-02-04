@@ -6,7 +6,7 @@ poetry.lock
 .venv/
 logs.log
 data/*
-src/domotz-dashboards/__pycache__/
+__pycache__/
 
 *.tar.gz
 *.whl
