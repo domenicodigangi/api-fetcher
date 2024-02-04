@@ -50,11 +50,22 @@ jobs:
       #----------------------------------------------
       - name: Install project
         run: poetry install --no-interaction
-      #----------------------------------------------
-      #              run test suite with coverage
-      #----------------------------------------------
-      - name: Run coverage
+
+      # Run linting (optional but recommended)
+      - name: Lint with flake8
         run: |
           source .venv/bin/activate
-          coverage run -m pytest tests/
-          coverage report
+          poetry run flake8 src tests
+
+      # Run tests with pytest and generate coverage report
+      - name: Run tests with pytest
+        run: |
+          source .venv/bin/activate
+          poetry run pytest tests/
+
+      - name: Generate coverage report
+        run: |
+          source .venv/bin/activate
+          poetry run coverage run -m pytest tests/
+          poetry run coverage report
+          poetry run coverage xml
