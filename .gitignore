@@ -1,0 +1,15 @@
+*.env
+.env
+poetry.lock
+*.pyc
+*.log
+.venv/
+logs.log
+data/*
+src/domotz-dashboards/__pycache__/
+
+*.tar.gz
+*.whl
+*.htpasswd
+
+*secrets/
