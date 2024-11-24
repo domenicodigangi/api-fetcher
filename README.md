@@ -10,7 +10,4 @@ Fetch data from public APIs with ease.
 
 `api-fetcher` is a Python library designed to simplify the process of fetching and interacting with APIs. It provides a set of tools and utilities to make API calls more streamlined and efficient.
 
-## Installation
 
-```bash
-pip install api-fetcher
